@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "lambda template for deployment"
+Mappings:
+  ParametersMAP:
+    key:
+      Name: UserName
+      Value: JohnDoe
+
+Resources:
+  BasicParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: SSM Parameter for key value store.
+      Name: !FindInMap [ 'ParametersMAP','key', 'Name' ]
+      Type: String
+      Value: !FindInMap [ 'ParametersMAP', 'key', 'Value' ]
+      Tags:
+        Environment: DEV
+  ParameterStoreRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::XXXXXXXXX:role/lambda_basic_execution'
+      Policies:
+        -
+          PolicyName: 'ParameterStoreAccess'
+          PolicyDocument:
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'ssm:GetParameter*'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/UserName'
+  ExerciseLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'ExerciseLambdaFunction'
+      Description: 'Integrating lambda with Parameter Store'
+      Handler: 'lambda_function.lambda_handler'
+      Role: !GetAtt ParameterStoreRole.Arn
+      Runtime: 'python3.6'
+      Timeout: 5
+      Tracing: 'Active'
+      Code:
+        Zipfile: |
+          import os, json, boto3
+
+          ssm_client = boto3.client('ssm')
+          destFileName="s3_ssm.txt"
+          bucketName="parametersbucket"
+          s3 = boto3.resource('s3')
+          def lambda_handler(event, context):
+            parameter = ssm_client.get_parameter(Name='UserName')
+            content_ssm = { 'Name': parameter['Parameter']['Name'], 'Value': parameter['Parameter']['Value'] }
+            ssm_bucket = s3.Bucket(bucketName)
+            ssm_bucket.Object(bucketName, 'ssm.txt').put(Body=json.dumps(content_ssm))
+  ParameterStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 'parametersbucket'
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Ref BucketName
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ParameterStoreBucket
+      PolicyDocument:
+        Statement:
+            Sid: "PutObjectAccess"
+            Action:
+              - s3:PutObject
+              - s3:ListBucket
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref ExerciseLambdaFunction 
+            Resource:
+              - 'arn:aws:s3:::parametersbucket'
+
