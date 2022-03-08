@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "lambda template for webhook"
+Description: "lambda template for"
 Mappings:
   ParametersMAP:
     key:
