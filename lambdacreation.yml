@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "lambda template"
+Description: "lambda template for deployment"
 Mappings:
   ParametersMAP:
     key:
